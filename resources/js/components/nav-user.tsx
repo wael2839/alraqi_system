@@ -21,7 +21,7 @@ export function NavUser() {
     const isMobile = useIsMobile();
 
     return (
-        <SidebarMenu>
+        <SidebarMenu className="mt-auto border border-sidebar-border/70 rounded-lg ">
             <SidebarMenuItem>
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>

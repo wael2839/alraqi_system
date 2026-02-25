@@ -13,11 +13,13 @@ return new class extends Migration
     {
         Schema::create('workflow_steps', function (Blueprint $table) {
             $table->id();
+            $table->integer('step_number');
             $table->string('step_name', 255);
-            $table->string('next_step', 255)->nullable(); // can be null for the last step
-            $table->string('required_role', 255); // role required to perform this step
+            $table->string('step_department', 255)->nullable();
+            $table->string('required_role', 255);
             $table->timestamps();
         });
+
     }
 
     /**

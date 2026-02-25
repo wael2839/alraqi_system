@@ -16,6 +16,7 @@ class PurchaseRequest extends Model
         'pickup_location',
         'request_date',
         'status',
+        'current_step_id',
     ];
 
     /**
@@ -59,5 +60,15 @@ class PurchaseRequest extends Model
     public function approvalSteps(): HasMany
     {
         return $this->hasMany(ApprovalStep::class, 'purchase_request_id');
+    }
+
+    /**
+     * Current workflow step (status). Used to display step name as request status.
+     *
+     * @return BelongsTo<WorkflowStep>
+     */
+    public function currentStep(): BelongsTo
+    {
+        return $this->belongsTo(WorkflowStep::class, 'current_step_id');
     }
 }

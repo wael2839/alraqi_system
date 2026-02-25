@@ -7,7 +7,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Department extends Model
 {
-    protected $fillable = ['name'];
+    /** Table name in the database (users.dep_id references this table). */
+    // protected $table = 'department';
+
+    protected $fillable = ['name', 'name_ar'];
 
     /**
      * @return HasMany<User>

@@ -7,8 +7,9 @@ use Illuminate\Database\Eloquent\Model;
 class WorkflowStep extends Model
 {
     protected $fillable = [
+        'step_number',
         'step_name',
-        'next_step',
+        'step_department',
         'required_role',
     ];
 }
