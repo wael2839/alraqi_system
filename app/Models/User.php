@@ -26,6 +26,7 @@ class User extends Authenticatable
         'password',
         'dep_id',
         'team_role',
+        'is_active',
     ];
 
     /**
@@ -51,7 +52,23 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'two_factor_confirmed_at' => 'datetime',
+            'is_active' => 'boolean',
         ];
+    }
+
+    public function isGeneralManager(): bool
+    {
+        return $this->team_role === 'general_manager';
+    }
+
+    public function isDepartmentManager(): bool
+    {
+        return $this->team_role === 'department_manager';
+    }
+
+    public function isEmployee(): bool
+    {
+        return $this->team_role === 'employee' || $this->team_role === null;
     }
 
     /**

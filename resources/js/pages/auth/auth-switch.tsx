@@ -7,24 +7,34 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { store as loginStore } from '@/routes/login';
 import { store as registerStore } from '@/routes/register';
 import { request } from '@/routes/password';
 import TextLink from '@/components/text-link';
 
+type Department = {
+    id: number;
+    name: string;
+    name_ar: string;
+};
+
 type Props = {
     status?: string;
     canResetPassword: boolean;
     mode?: 'login' | 'register';
+    departments?: Department[];
 };
 
 export default function AuthSwitch({
     status,
     canResetPassword,
     mode = 'login',
+    departments = [],
 }: Props) {
     const [isRegister, setIsRegister] = useState(mode === 'register');
+    const [selectedDepartment, setSelectedDepartment] = useState<string>('');
 
     return (
         <>
@@ -177,6 +187,29 @@ export default function AuthSwitch({
                                                     placeholder="example@email.com"
                                                 />
                                                 <InputError message={errors.email} />
+                                            </div>
+
+                                            <div className="grid gap-2">
+                                                <Label htmlFor="register-department">القسم</Label>
+                                                <Select
+                                                    name="dep_id"
+                                                    value={selectedDepartment}
+                                                    onValueChange={setSelectedDepartment}
+                                                    required
+                                                >
+                                                    <SelectTrigger id="register-department">
+                                                        <SelectValue placeholder="اختر القسم" />
+                                                    </SelectTrigger>
+                                                    <SelectContent>
+                                                        {departments.map((dept) => (
+                                                            <SelectItem key={dept.id} value={String(dept.id)}>
+                                                                {dept.name_ar || dept.name}
+                                                            </SelectItem>
+                                                        ))}
+                                                    </SelectContent>
+                                                </Select>
+                                                <input type="hidden" name="dep_id" value={selectedDepartment} />
+                                                <InputError message={errors.dep_id} />
                                             </div>
 
                                             <div className="grid gap-2">

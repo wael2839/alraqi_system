@@ -41,6 +41,7 @@ class HandleInertiaRequests extends Middleware
             'auth' => [
                 'user' => $request->user(),
                 'canSeeApprovalRequests' => (bool) trim((string) ($request->user()?->team_role ?? '')),
+                'isGeneralManager' => $request->user()?->team_role === 'general_manager',
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];

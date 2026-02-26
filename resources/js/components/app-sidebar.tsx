@@ -1,5 +1,5 @@
 import { Link, usePage } from '@inertiajs/react';
-import { ClipboardList, History, LayoutGrid, ShoppingCart } from 'lucide-react';
+import { ClipboardList, History, LayoutGrid, ShoppingCart, Users } from 'lucide-react';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import {
@@ -16,8 +16,9 @@ import type { NavItem } from '@/types';
 import AppLogo from './app-logo';
 
 export function AppSidebar() {
-    const { auth } = usePage().props as { auth: { canSeeApprovalRequests?: boolean } };
+    const { auth } = usePage().props as { auth: { canSeeApprovalRequests?: boolean; isGeneralManager?: boolean } };
     const canSeeApproval = auth?.canSeeApprovalRequests ?? false;
+    const isGeneralManager = auth?.isGeneralManager ?? false;
 
     const mainNavItems: NavItem[] = [
         { title: 'لوحة التحكم', href: dashboard(), icon: LayoutGrid },
@@ -26,6 +27,11 @@ export function AppSidebar() {
             ? [
                   { title: 'الطلبات الحالية', href: '/purchase-requests/current', icon: ClipboardList },
                   { title: 'الطلبات السابقة', href: '/purchase-requests/past', icon: History },
+              ]
+            : []),
+        ...(isGeneralManager
+            ? [
+                  { title: 'إدارة المستخدمين', href: '/user-management', icon: Users },
               ]
             : []),
     ];

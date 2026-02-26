@@ -1,9 +1,9 @@
 <?php
 
 use App\Http\Controllers\PurchaseRequestController;
+use App\Http\Controllers\UserManagementController;
 use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
-use Laravel\Fortify\Features;
 
 Route::get('/', function () {
     return redirect()->route('login');
@@ -22,6 +22,14 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('purchase-requests/{purchaseRequest}/pdf', [PurchaseRequestController::class, 'pdf'])->name('purchase-requests.pdf');
     Route::get('purchase-requests/{purchaseRequest}', [PurchaseRequestController::class, 'show'])->name('purchase-requests.show');
     Route::post('purchase-requests', [PurchaseRequestController::class, 'store'])->name('purchase-requests.store');
+});
+
+// مسارات إدارة المستخدمين (للمدير العام فقط)
+Route::middleware(['auth', 'verified', 'general_manager'])->prefix('user-management')->name('user-management.')->group(function () {
+    Route::get('/', [UserManagementController::class, 'index'])->name('index');
+    Route::patch('/{user}/toggle-active', [UserManagementController::class, 'toggleActive'])->name('toggle-active');
+    Route::patch('/{user}/department', [UserManagementController::class, 'updateDepartment'])->name('update-department');
+    Route::patch('/{user}/role', [UserManagementController::class, 'updateRole'])->name('update-role');
 });
 
 require __DIR__.'/settings.php';
