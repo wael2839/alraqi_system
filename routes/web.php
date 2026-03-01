@@ -1,17 +1,18 @@
 <?php
 
+use App\Http\Controllers\CommitteeController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\PurchaseRequestController;
 use App\Http\Controllers\UserManagementController;
 use Illuminate\Support\Facades\Route;
-use Inertia\Inertia;
 
 Route::get('/', function () {
     return redirect()->route('login');
 })->name('home');
 
-Route::get('dashboard', function () {
-    return Inertia::render('dashboard');
-})->middleware(['auth', 'verified'])->name('dashboard');
+Route::get('dashboard', [DashboardController::class, 'index'])
+    ->middleware(['auth', 'verified', 'general_manager'])
+    ->name('dashboard');
 
 // مسارات طلبات الشراء (تتطلب تسجيل الدخول)
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -22,6 +23,16 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('purchase-requests/{purchaseRequest}/pdf', [PurchaseRequestController::class, 'pdf'])->name('purchase-requests.pdf');
     Route::get('purchase-requests/{purchaseRequest}', [PurchaseRequestController::class, 'show'])->name('purchase-requests.show');
     Route::post('purchase-requests', [PurchaseRequestController::class, 'store'])->name('purchase-requests.store');
+    Route::post('purchase-requests/{purchaseRequest}/approve', [PurchaseRequestController::class, 'approve'])->name('purchase-requests.approve');
+    Route::post('purchase-requests/{purchaseRequest}/reject', [PurchaseRequestController::class, 'reject'])->name('purchase-requests.reject');
+
+    // Committee routes
+    Route::get('purchase-requests/{purchaseRequest}/committee', [CommitteeController::class, 'getCommitteeData'])->name('purchase-requests.committee.data');
+    Route::get('purchase-requests/{purchaseRequest}/committee/available-members', [CommitteeController::class, 'getAvailableMembers'])->name('purchase-requests.committee.available-members');
+    Route::post('purchase-requests/{purchaseRequest}/committee/members', [CommitteeController::class, 'storeMembers'])->name('purchase-requests.committee.store-members');
+    Route::post('purchase-requests/{purchaseRequest}/committee/offers', [CommitteeController::class, 'storeOffer'])->name('purchase-requests.committee.store-offer');
+    Route::post('purchase-requests/{purchaseRequest}/committee/start-voting', [CommitteeController::class, 'startVoting'])->name('purchase-requests.committee.start-voting');
+    Route::post('purchase-requests/{purchaseRequest}/committee/vote', [CommitteeController::class, 'vote'])->name('purchase-requests.committee.vote');
 });
 
 // مسارات إدارة المستخدمين (للمدير العام فقط)

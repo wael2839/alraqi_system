@@ -8,6 +8,9 @@ export type User = {
     two_factor_enabled?: boolean;
     created_at: string;
     updated_at: string;
+    department_name?: string | null;
+    role_label?: string | null;
+    team_role?: string | null;
     [key: string]: unknown;
 };
 

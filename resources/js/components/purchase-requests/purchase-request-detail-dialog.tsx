@@ -1,12 +1,15 @@
+import { router } from '@inertiajs/react';
 import {
     Calendar,
+    Check,
     CircleDollarSign,
-    FileText,
     FileDown,
+    FileText,
     MapPin,
     Package,
     Tag,
     User,
+    X,
 } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
@@ -15,13 +18,18 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
     Dialog,
     DialogContent,
+    DialogDescription,
+    DialogFooter,
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
 import { Spinner } from '@/components/ui/spinner';
+import { Textarea } from '@/components/ui/textarea';
 import { cn } from '@/lib/utils';
-import type { PurchaseRequestDetail, WorkflowStepItem } from './types';
+import type { ApprovalHistoryItem, PurchaseRequestDetail, WorkflowStepItem } from './types';
 import { WorkflowStepper } from './workflow-stepper';
+import { CommitteeSection } from './committee-section';
+import { WinningOfferCard } from './winning-offer-card';
 
 const STATUS_STYLES = {
     processing: 'border-blue-500/50 bg-blue-500/10 text-blue-700 dark:text-blue-400',
@@ -59,10 +67,65 @@ export function PurchaseRequestDetailDialog({
 }: PurchaseRequestDetailDialogProps) {
     const [state, setState] = useState<{
         loading: boolean;
-        data: { request: PurchaseRequestDetail; workflowSteps: WorkflowStepItem[] } | null;
+        data: {
+            request: PurchaseRequestDetail;
+            workflowSteps: WorkflowStepItem[];
+            approvalHistory: ApprovalHistoryItem[];
+            canApprove: boolean;
+        } | null;
         error: string | null;
     }>({ loading: false, data: null, error: null });
     const requestIdRef = useRef<number | null>(null);
+
+    const [showRejectDialog, setShowRejectDialog] = useState(false);
+    const [rejectComment, setRejectComment] = useState('');
+    const [actionLoading, setActionLoading] = useState(false);
+    const [actionError, setActionError] = useState<string | null>(null);
+
+    const handleApprove = () => {
+        if (!state.data) return;
+        setActionLoading(true);
+        setActionError(null);
+
+        router.post(
+            `/purchase-requests/${state.data.request.id}/approve`,
+            {},
+            {
+                onSuccess: () => {
+                    onOpenChange(false);
+                },
+                onError: (errors) => {
+                    setActionError(Object.values(errors)[0] as string || 'حدث خطأ أثناء الموافقة');
+                },
+                onFinish: () => {
+                    setActionLoading(false);
+                },
+            },
+        );
+    };
+
+    const handleReject = () => {
+        if (!state.data || !rejectComment.trim()) return;
+        setActionLoading(true);
+        setActionError(null);
+
+        router.post(
+            `/purchase-requests/${state.data.request.id}/reject`,
+            { comment: rejectComment },
+            {
+                onSuccess: () => {
+                    setShowRejectDialog(false);
+                    onOpenChange(false);
+                },
+                onError: (errors) => {
+                    setActionError(errors.comment || Object.values(errors)[0] as string || 'حدث خطأ أثناء الرفض');
+                },
+                onFinish: () => {
+                    setActionLoading(false);
+                },
+            },
+        );
+    };
 
     useEffect(() => {
         if (!open) {
@@ -85,7 +148,12 @@ export function PurchaseRequestDetailDialog({
                 if (requestIdRef.current !== id) return;
                 setState({
                     loading: false,
-                    data: { request: json.request, workflowSteps: json.workflowSteps ?? [] },
+                    data: {
+                        request: json.request,
+                        workflowSteps: json.workflowSteps ?? [],
+                        approvalHistory: json.approvalHistory ?? [],
+                        canApprove: json.canApprove ?? false,
+                    },
                     error: null,
                 });
             })
@@ -247,12 +315,112 @@ export function PurchaseRequestDetailDialog({
                                 <WorkflowStepper
                                     steps={state.data.workflowSteps}
                                     currentStepId={state.data.request.current_step_id}
+                                    approvalHistory={state.data.approvalHistory}
+                                    status={state.data.request.status}
                                 />
                             </CardContent>
                         </Card>
+
+                        <CommitteeSection
+                            requestId={state.data.request.id}
+                            currentStepDepartment={state.data.request.current_step?.step_department ?? null}
+                            currentStepName={state.data.request.current_step?.step_name ?? null}
+                        />
+
+                        <WinningOfferCard
+                            requestId={state.data.request.id}
+                            winningOfferId={state.data.request.winning_offer_id ?? null}
+                            committeeStatus={state.data.request.committee_status ?? null}
+                        />
+
+                        {state.data.canApprove && (
+                            <Card className="border-primary/30 bg-primary/5 py-4">
+                                <CardHeader>
+                                    <CardTitle className="text-base">اتخاذ إجراء</CardTitle>
+                                </CardHeader>
+                                <CardContent className="space-y-4">
+                                    {actionError && (
+                                        <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+                                            {actionError}
+                                        </p>
+                                    )}
+                                    <div className="flex flex-wrap gap-3">
+                                        <Button
+                                            onClick={handleApprove}
+                                            disabled={actionLoading}
+                                            className="bg-green-600 hover:bg-green-700"
+                                        >
+                                            {actionLoading ? (
+                                                <Spinner className="me-2 size-4" />
+                                            ) : (
+                                                <Check className="me-2 size-4" />
+                                            )}
+                                            موافقة
+                                        </Button>
+                                        <Button
+                                            onClick={() => {
+                                                setRejectComment('');
+                                                setActionError(null);
+                                                setShowRejectDialog(true);
+                                            }}
+                                            disabled={actionLoading}
+                                            variant="destructive"
+                                        >
+                                            <X className="me-2 size-4" />
+                                            رفض
+                                        </Button>
+                                    </div>
+                                </CardContent>
+                            </Card>
+                        )}
                     </div>
                 )}
             </DialogContent>
+
+            <Dialog open={showRejectDialog} onOpenChange={setShowRejectDialog}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>رفض الطلب</DialogTitle>
+                        <DialogDescription>
+                            يرجى إدخال سبب رفض هذا الطلب
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="space-y-4 py-4">
+                        {actionError && (
+                            <p className="rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+                                {actionError}
+                            </p>
+                        )}
+                        <Textarea
+                            placeholder="أدخل سبب الرفض..."
+                            value={rejectComment}
+                            onChange={(e) => setRejectComment(e.target.value)}
+                            className="min-h-[100px]"
+                        />
+                    </div>
+                    <DialogFooter className="gap-2 sm:gap-0">
+                        <Button
+                            variant="outline"
+                            onClick={() => setShowRejectDialog(false)}
+                            disabled={actionLoading}
+                        >
+                            إلغاء
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={handleReject}
+                            disabled={actionLoading || !rejectComment.trim()}
+                        >
+                            {actionLoading ? (
+                                <Spinner className="me-2 size-4" />
+                            ) : (
+                                <X className="me-2 size-4" />
+                            )}
+                            تأكيد الرفض
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </Dialog>
     );
 }

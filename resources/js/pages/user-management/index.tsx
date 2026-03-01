@@ -223,10 +223,11 @@ export default function UserManagementIndex({ users, departments, filters }: Pro
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>الاسم</TableHead>
-                                    <TableHead>البريد الإلكتروني</TableHead>
-                                    <TableHead>القسم</TableHead>
-                                    <TableHead>الدور</TableHead>
+                                    <TableHead className="w-16 text-center">ID</TableHead>
+                                    <TableHead className="text-center">الاسم</TableHead>
+                                    <TableHead className="text-center">البريد الإلكتروني</TableHead>
+                                    <TableHead className='text-center'>القسم</TableHead>
+                                    <TableHead className='text-center'>الدور</TableHead>
                                     <TableHead className="text-center">مفعل</TableHead>
                                     <TableHead className="text-center">الإجراءات</TableHead>
                                 </TableRow>
@@ -234,26 +235,29 @@ export default function UserManagementIndex({ users, departments, filters }: Pro
                             <TableBody>
                                 {users.data.length === 0 ? (
                                     <TableRow>
-                                        <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                                        <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                                             لا يوجد مستخدمون
                                         </TableCell>
                                     </TableRow>
                                 ) : (
                                     users.data.map((user) => (
                                         <TableRow key={user.id}>
-                                            <TableCell className="font-medium">{user.name}</TableCell>
-                                            <TableCell>{user.email}</TableCell>
-                                            <TableCell>
+                                            <TableCell className="font-mono text-muted-foreground text-center">
+                                                #{user.id}
+                                            </TableCell>
+                                            <TableCell className="font-medium text-center">{user.name}</TableCell>
+                                            <TableCell className="text-center">{user.email}</TableCell>
+                                            <TableCell className="text-center">
                                                 {user.department ? (
-                                                    <Badge variant="outline">
-                                                        <Building2 className="me-1 size-3" />
+                                                    <Badge variant="outline" className="text-center">
+                                                        <Building2 className="me-1 size-3 text-center" />
                                                         {user.department.name_ar || user.department.name}
                                                     </Badge>
                                                 ) : (
                                                     <span className="text-muted-foreground">—</span>
                                                 )}
                                             </TableCell>
-                                            <TableCell>
+                                            <TableCell className="text-center">
                                                 {user.team_role ? (
                                                     <Badge variant={user.team_role === 'general_manager' ? 'default' : 'secondary'}>
                                                         <Shield className="me-1 size-3" />

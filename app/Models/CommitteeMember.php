@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class CommitteeMember extends Model
 {
@@ -14,7 +15,7 @@ class CommitteeMember extends Model
     ];
 
     /**
-     * @return BelongsTo<PurchaseRequest>
+     * @return BelongsTo<PurchaseRequest, $this>
      */
     public function purchaseRequest(): BelongsTo
     {
@@ -22,10 +23,28 @@ class CommitteeMember extends Model
     }
 
     /**
-     * @return BelongsTo<User>
+     * @return BelongsTo<User, $this>
      */
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class, 'user_id');
+    }
+
+    /**
+     * @return HasOne<OfferVote, $this>
+     */
+    public function vote(): HasOne
+    {
+        return $this->hasOne(OfferVote::class, 'committee_member_id');
+    }
+
+    public function isHead(): bool
+    {
+        return $this->user_role === 'رئيس';
+    }
+
+    public function hasVoted(): bool
+    {
+        return $this->vote()->exists();
     }
 }

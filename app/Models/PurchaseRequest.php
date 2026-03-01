@@ -17,6 +17,8 @@ class PurchaseRequest extends Model
         'request_date',
         'status',
         'current_step_id',
+        'committee_status',
+        'winning_offer_id',
     ];
 
     /**
@@ -65,10 +67,28 @@ class PurchaseRequest extends Model
     /**
      * Current workflow step (status). Used to display step name as request status.
      *
-     * @return BelongsTo<WorkflowStep>
+     * @return BelongsTo<WorkflowStep, $this>
      */
     public function currentStep(): BelongsTo
     {
         return $this->belongsTo(WorkflowStep::class, 'current_step_id');
+    }
+
+    /**
+     * @return BelongsTo<PriceOffer, $this>
+     */
+    public function winningOffer(): BelongsTo
+    {
+        return $this->belongsTo(PriceOffer::class, 'winning_offer_id');
+    }
+
+    public function getCommitteeHead(): ?CommitteeMember
+    {
+        return $this->committeeMembers()->where('user_role', 'رئيس')->first();
+    }
+
+    public function isInCommitteePhase(): bool
+    {
+        return $this->committee_status !== null && $this->committee_status !== 'completed';
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\StorePurchaseRequest;
+use App\Models\ApprovalStep;
 use App\Models\PurchaseRequest;
 use App\Models\WorkflowStep;
 use Illuminate\Http\JsonResponse;
@@ -55,8 +56,11 @@ class PurchaseRequestController extends Controller
 
         $deptName = $user->department?->name ? trim($user->department->name) : null;
         $deptNameAr = $user->department?->name_ar ? trim($user->department->name_ar) : null;
+        $userDepId = $user->dep_id;
 
         $purchaseRequests = PurchaseRequest::query()
+            ->whereNotNull('current_step_id')
+            ->whereNotIn('status', ['مرفوض', 'مكتمل'])
             ->whereHas('currentStep', function ($q) use ($user, $deptName, $deptNameAr) {
                 $q->where('required_role', $user->team_role);
                 $q->where(function ($q2) use ($deptName, $deptNameAr) {
@@ -68,13 +72,53 @@ class PurchaseRequestController extends Controller
             ->with([
                 'requester:id,name,email,dep_id',
                 'requester.department:id,name,name_ar',
-                'currentStep:id,step_name',
+                'currentStep:id,step_name,step_department',
             ])
             ->latest()
             ->get();
 
+        $requesterDeptRequests = PurchaseRequest::query()
+            ->whereNotNull('current_step_id')
+            ->whereNotIn('status', ['مرفوض', 'مكتمل'])
+            ->whereHas('currentStep', function ($q) use ($user) {
+                $q->where('required_role', $user->team_role);
+                $q->where('step_department', 'department_of_requester');
+            })
+            ->whereHas('requester', function ($q) use ($userDepId) {
+                $q->where('dep_id', $userDepId);
+            })
+            ->with([
+                'requester:id,name,email,dep_id',
+                'requester.department:id,name,name_ar',
+                'currentStep:id,step_name,step_department',
+            ])
+            ->latest()
+            ->get();
+
+        $committeeRequests = PurchaseRequest::query()
+            ->whereNotNull('current_step_id')
+            ->whereNotIn('status', ['مرفوض', 'مكتمل'])
+            ->whereHas('committeeMembers', function ($q) use ($user) {
+                $q->where('user_id', $user->id);
+            })
+            ->whereIn('committee_status', ['pending_offers', 'voting'])
+            ->with([
+                'requester:id,name,email,dep_id',
+                'requester.department:id,name,name_ar',
+                'currentStep:id,step_name,step_department',
+            ])
+            ->latest()
+            ->get();
+
+        $allRequests = $purchaseRequests
+            ->merge($requesterDeptRequests)
+            ->merge($committeeRequests)
+            ->unique('id')
+            ->sortByDesc('created_at')
+            ->values();
+
         return Inertia::render('purchase-requests/current', [
-            'purchaseRequests' => $purchaseRequests,
+            'purchaseRequests' => $allRequests,
         ]);
     }
 
@@ -106,21 +150,28 @@ class PurchaseRequestController extends Controller
      */
     public function show(Request $request, PurchaseRequest $purchaseRequest): JsonResponse|InertiaResponse
     {
+        $purchaseRequest->refresh();
         $user = $request->user();
 
         $allowed = $purchaseRequest->requester_id === $user->id
-            || $purchaseRequest->approvalSteps()->where('action_by', $user->id)->exists();
+            || $purchaseRequest->approvalSteps()->where('action_by', $user->id)->exists()
+            || $purchaseRequest->committeeMembers()->where('user_id', $user->id)->exists();
 
         if (! $allowed) {
             $user->load('department:id,name,name_ar');
             $deptName = $user->department?->name ? trim($user->department->name) : null;
             $deptNameAr = $user->department?->name_ar ? trim($user->department->name_ar) : null;
-            $allowed = $purchaseRequest->currentStep && $purchaseRequest->currentStep->required_role === $user->team_role
-                && (
-                    $purchaseRequest->currentStep->step_department === null
-                    || $purchaseRequest->currentStep->step_department === $deptName
-                    || $purchaseRequest->currentStep->step_department === $deptNameAr
-                );
+
+            if ($purchaseRequest->currentStep && $purchaseRequest->currentStep->required_role === $user->team_role) {
+                if ($purchaseRequest->currentStep->step_department === 'department_of_requester') {
+                    $purchaseRequest->load('requester:id,dep_id');
+                    $allowed = $purchaseRequest->requester?->dep_id === $user->dep_id;
+                } else {
+                    $allowed = $purchaseRequest->currentStep->step_department === null
+                        || $purchaseRequest->currentStep->step_department === $deptName
+                        || $purchaseRequest->currentStep->step_department === $deptNameAr;
+                }
+            }
         }
 
         if (! $allowed) {
@@ -131,16 +182,27 @@ class PurchaseRequestController extends Controller
 
         $workflowSteps = WorkflowStep::query()->orderBy('step_number')->get(['id', 'step_number', 'step_name', 'step_department', 'required_role']);
 
+        $approvalHistory = ApprovalStep::where('purchase_request_id', $purchaseRequest->id)
+            ->with('actionBy:id,name')
+            ->orderBy('created_at')
+            ->get(['id', 'action_by', 'action_taken', 'comment', 'created_at']);
+
+        $canApprove = $this->userCanApprove($request, $purchaseRequest);
+
         if ($request->expectsJson() || $request->header('Accept') === 'application/json') {
             return response()->json([
                 'request' => $purchaseRequest,
                 'workflowSteps' => $workflowSteps,
+                'approvalHistory' => $approvalHistory,
+                'canApprove' => $canApprove,
             ]);
         }
 
         return Inertia::render('purchase-requests/show', [
             'purchaseRequest' => $purchaseRequest,
             'workflowSteps' => $workflowSteps,
+            'approvalHistory' => $approvalHistory,
+            'canApprove' => $canApprove,
         ]);
     }
 
@@ -184,18 +246,24 @@ class PurchaseRequestController extends Controller
         $user = $request->user();
 
         $allowed = $purchaseRequest->requester_id === $user->id
-            || $purchaseRequest->approvalSteps()->where('action_by', $user->id)->exists();
+            || $purchaseRequest->approvalSteps()->where('action_by', $user->id)->exists()
+            || $purchaseRequest->committeeMembers()->where('user_id', $user->id)->exists();
 
         if (! $allowed) {
             $user->load('department:id,name,name_ar');
             $deptName = $user->department?->name ? trim($user->department->name) : null;
             $deptNameAr = $user->department?->name_ar ? trim($user->department->name_ar) : null;
-            $allowed = $purchaseRequest->currentStep && $purchaseRequest->currentStep->required_role === $user->team_role
-                && (
-                    $purchaseRequest->currentStep->step_department === null
-                    || $purchaseRequest->currentStep->step_department === $deptName
-                    || $purchaseRequest->currentStep->step_department === $deptNameAr
-                );
+
+            if ($purchaseRequest->currentStep && $purchaseRequest->currentStep->required_role === $user->team_role) {
+                if ($purchaseRequest->currentStep->step_department === 'department_of_requester') {
+                    $purchaseRequest->load('requester:id,dep_id');
+                    $allowed = $purchaseRequest->requester?->dep_id === $user->dep_id;
+                } else {
+                    $allowed = $purchaseRequest->currentStep->step_department === null
+                        || $purchaseRequest->currentStep->step_department === $deptName
+                        || $purchaseRequest->currentStep->step_department === $deptNameAr;
+                }
+            }
         }
 
         if (! $allowed) {
@@ -208,7 +276,8 @@ class PurchaseRequestController extends Controller
         $purchaseRequest->load([
             'requester:id,name,email,dep_id',
             'requester.department:id,name,name_ar',
-            'currentStep:id,step_name,step_number',
+            'currentStep:id,step_name,step_number,step_department,required_role',
+            'winningOffer:id,vendor_name,offer_amount,delivery_period,payment_method,meets_specifications,notes',
         ]);
     }
 
@@ -239,5 +308,161 @@ class PurchaseRequestController extends Controller
         return redirect()
             ->route('purchase-requests.index')
             ->with('status', 'تم إنشاء طلب الشراء بنجاح.');
+    }
+
+    /**
+     * Approve a purchase request - move to next workflow step.
+     */
+    public function approve(Request $request, PurchaseRequest $purchaseRequest): RedirectResponse
+    {
+        $purchaseRequest->refresh();
+        $this->authorizeApprovalAction($request, $purchaseRequest);
+
+        $currentStep = $purchaseRequest->currentStep;
+        $nextStep = WorkflowStep::where('step_number', '>', $currentStep->step_number)
+            ->orderBy('step_number')
+            ->first();
+
+        ApprovalStep::create([
+            'purchase_request_id' => $purchaseRequest->id,
+            'action_by' => $request->user()->id,
+            'action_taken' => 'approved',
+            'comment' => null,
+        ]);
+
+        if ($nextStep) {
+            $purchaseRequest->update([
+                'current_step_id' => $nextStep->id,
+            ]);
+            $message = 'تمت الموافقة وانتقل الطلب إلى: '.$nextStep->step_name;
+        } else {
+            $purchaseRequest->update([
+                'status' => 'مكتمل',
+                'current_step_id' => null,
+            ]);
+            $message = 'تمت الموافقة النهائية على الطلب';
+        }
+
+        return back()->with('success', $message);
+    }
+
+    /**
+     * Reject a purchase request.
+     */
+    public function reject(Request $request, PurchaseRequest $purchaseRequest): RedirectResponse
+    {
+        $purchaseRequest->refresh();
+        $this->authorizeApprovalAction($request, $purchaseRequest);
+
+        $request->validate([
+            'comment' => ['required', 'string', 'min:5', 'max:1000'],
+        ], [
+            'comment.required' => 'يجب إدخال سبب الرفض',
+            'comment.min' => 'سبب الرفض يجب أن يكون 5 أحرف على الأقل',
+        ]);
+
+        ApprovalStep::create([
+            'purchase_request_id' => $purchaseRequest->id,
+            'action_by' => $request->user()->id,
+            'action_taken' => 'rejected',
+            'comment' => $request->comment,
+        ]);
+
+        $purchaseRequest->update([
+            'status' => 'مرفوض',
+            'current_step_id' => null,
+        ]);
+
+        return back()->with('success', 'تم رفض الطلب');
+    }
+
+    /**
+     * Check if user can approve/reject this request (returns boolean, no abort).
+     */
+    private function userCanApprove(Request $request, PurchaseRequest $purchaseRequest): bool
+    {
+        $user = $request->user();
+
+        if ($purchaseRequest->current_step_id === null) {
+            return false;
+        }
+
+        if (in_array($purchaseRequest->status, ['مرفوض', 'مكتمل', 'rejected', 'completed'])) {
+            return false;
+        }
+
+        if (! $purchaseRequest->currentStep) {
+            return false;
+        }
+
+        $stepName = $purchaseRequest->currentStep->step_name ?? '';
+        $isCommitteeStep = str_contains($stepName, 'تحديد اعضاء اللجنة')
+            || str_contains($stepName, 'تحديد أعضاء اللجنة')
+            || str_contains($stepName, 'دراسة العروض');
+
+        if ($isCommitteeStep) {
+            return false;
+        }
+
+        if ($purchaseRequest->currentStep->required_role !== $user->team_role) {
+            return false;
+        }
+
+        $user->load('department:id,name,name_ar');
+        $deptName = $user->department?->name ? trim($user->department->name) : null;
+        $deptNameAr = $user->department?->name_ar ? trim($user->department->name_ar) : null;
+
+        $stepDept = $purchaseRequest->currentStep->step_department;
+
+        if ($stepDept === 'department_of_requester') {
+            $purchaseRequest->load('requester:id,dep_id');
+
+            return $purchaseRequest->requester?->dep_id === $user->dep_id;
+        }
+
+        if ($stepDept !== null && $stepDept !== $deptName && $stepDept !== $deptNameAr) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
+     * Check if user can approve/reject this request.
+     */
+    private function authorizeApprovalAction(Request $request, PurchaseRequest $purchaseRequest): void
+    {
+        $user = $request->user();
+
+        if ($purchaseRequest->current_step_id === null) {
+            abort(400, 'الطلب مكتمل أو مرفوض ولا يمكن اتخاذ إجراء عليه');
+        }
+
+        if (in_array($purchaseRequest->status, ['مرفوض', 'مكتمل', 'rejected', 'completed'])) {
+            abort(400, 'الطلب مكتمل أو مرفوض ولا يمكن اتخاذ إجراء عليه');
+        }
+
+        if (! $purchaseRequest->currentStep) {
+            abort(400, 'الطلب مكتمل أو مرفوض ولا يمكن اتخاذ إجراء عليه');
+        }
+
+        if ($purchaseRequest->currentStep->required_role !== $user->team_role) {
+            abort(403, 'ليس لديك صلاحية اتخاذ إجراء على هذا الطلب');
+        }
+
+        $user->load('department:id,name,name_ar');
+        $deptName = $user->department?->name ? trim($user->department->name) : null;
+        $deptNameAr = $user->department?->name_ar ? trim($user->department->name_ar) : null;
+
+        $stepDept = $purchaseRequest->currentStep->step_department;
+
+        if ($stepDept === 'department_of_requester') {
+            $purchaseRequest->load('requester:id,dep_id');
+            if ($purchaseRequest->requester?->dep_id !== $user->dep_id) {
+                abort(403, 'هذا الطلب يتطلب موافقة مدير قسم صاحب الطلب');
+            }
+        } elseif ($stepDept !== null && $stepDept !== $deptName && $stepDept !== $deptNameAr) {
+            abort(403, 'هذا الطلب يتطلب موافقة قسم آخر');
+        }
     }
 }

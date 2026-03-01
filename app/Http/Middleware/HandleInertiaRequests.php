@@ -35,13 +35,26 @@ class HandleInertiaRequests extends Middleware
      */
     public function share(Request $request): array
     {
+        $user = $request->user();
+        $user?->load('department:id,name,name_ar');
+
+        $roleLabels = [
+            'general_manager' => 'المدير العام',
+            'department_manager' => 'مدير قسم',
+            'employee' => 'موظف',
+        ];
+
         return [
             ...parent::share($request),
             'name' => config('app.name'),
             'auth' => [
-                'user' => $request->user(),
-                'canSeeApprovalRequests' => (bool) trim((string) ($request->user()?->team_role ?? '')),
-                'isGeneralManager' => $request->user()?->team_role === 'general_manager',
+                'user' => $user ? [
+                    ...$user->toArray(),
+                    'department_name' => $user->department?->name_ar ?? $user->department?->name,
+                    'role_label' => $roleLabels[$user->team_role] ?? 'موظف',
+                ] : null,
+                'canSeeApprovalRequests' => (bool) trim((string) ($user?->team_role ?? '')),
+                'isGeneralManager' => $user?->team_role === 'general_manager',
             ],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
         ];

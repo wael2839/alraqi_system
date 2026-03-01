@@ -21,7 +21,9 @@ export function AppSidebar() {
     const isGeneralManager = auth?.isGeneralManager ?? false;
 
     const mainNavItems: NavItem[] = [
-        { title: 'لوحة التحكم', href: dashboard(), icon: LayoutGrid },
+        ...(isGeneralManager
+            ? [{ title: 'لوحة التحكم', href: dashboard(), icon: LayoutGrid }]
+            : []),
         { title: 'طلباتي', href: '/purchase-requests', icon: ShoppingCart },
         ...(canSeeApproval
             ? [
